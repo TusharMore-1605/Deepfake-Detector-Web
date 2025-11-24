@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deepfake Voice Detector</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .gradient-text { background: linear-gradient(to right, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .card { background-color: #1e293b; border: 1px solid #334155; }
+        .record-btn-active { animation: pulse 1.5s infinite; background-color: #ef4444; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Header -->
+    <div class="text-center mb-10">
+        <h1 class="text-5xl font-bold mb-2 tracking-tight">Voice <span class="gradient-text">Deepfake Detector</span></h1>
+        <p class="text-slate-400">Upload audio or record your voice to analyze authenticity.</p>
+    </div>
+
+    <!-- Main Container -->
+    <div class="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        <!-- Input Section -->
+        <div class="card rounded-2xl p-6 shadow-xl">
+            <!-- Tabs -->
+            <div class="flex mb-6 bg-slate-800 p-1 rounded-lg">
+                <button onclick="switchTab('upload')" id="tab-upload" class="flex-1 py-2 rounded-md text-sm font-semibold bg-slate-600 text-white transition-all">Upload File</button>
+                <button onclick="switchTab('record')" id="tab-record" class="flex-1 py-2 rounded-md text-sm font-semibold text-slate-400 hover:text-white transition-all">Record Mic</button>
+            </div>
+
+            <!-- Upload Area -->
+            <div id="section-upload" class="h-64 border-2 border-dashed border-slate-600 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:border-sky-400 hover:text-sky-400 transition-colors cursor-pointer relative">
+                <input type="file" id="fileInput" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="audio/*">
+                <i class="fas fa-cloud-upload-alt text-4xl mb-3"></i>
+                <p class="font-medium">Click or Drag audio here</p>
+                <p class="text-xs text-slate-500 mt-2">Supports WAV, MP3, FLAC</p>
+                <p id="fileNameDisplay" class="text-sm text-sky-400 mt-4 font-semibold hidden"></p>
+            </div>
+
+            <!-- Record Area -->
+            <div id="section-record" class="hidden h-64 flex flex-col items-center justify-center bg-slate-800 rounded-xl">
+                <button id="recordBtn" class="w-20 h-20 rounded-full bg-slate-700 flex items-center justify-center transition-all hover:bg-slate-600">
+                    <i class="fas fa-microphone text-3xl text-white"></i>
+                </button>
+                <p id="recordStatus" class="mt-4 text-slate-400 font-medium">Click to Record</p>
+                <audio id="audioPlayback" controls class="mt-4 hidden w-3/4"></audio>
+            </div>
+
+            <!-- Analyze Button -->
+            <button onclick="analyzeAudio()" id="analyzeBtn" class="w-full mt-6 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                Analyze Audio
+            </button>
+        </div>
+
+        <!-- Result Section -->
+        <div class="card rounded-2xl p-6 shadow-xl flex flex-col justify-center relative overflow-hidden">
+            <div id="loadingOverlay" class="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center z-10 hidden">
+                <div class="w-12 h-12 border-4 border-sky-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p class="text-sky-400 font-medium animate-pulse">Processing Audio...</p>
+            </div>
+
+            <div id="initialState" class="text-center text-slate-500">
+                <i class="fas fa-wave-square text-6xl mb-4 opacity-20"></i>
+                <p>Results will appear here</p>
+            </div>
+
+            <div id="resultState" class="hidden text-center">
+                <div id="resultIcon" class="w-24 h-24 rounded-full mx-auto flex items-center justify-center text-5xl mb-6 shadow-2xl">
+                    <i class="fas fa-check"></i>
+                </div>
+                
+                <h2 id="resultLabel" class="text-3xl font-bold mb-2">ORIGINAL</h2>
+                <p class="text-slate-400 mb-6">Confidence Score</p>
+                
+                <div class="w-full bg-slate-700 rounded-full h-6 mb-2 relative overflow-hidden">
+                    <div id="probBar" class="h-full rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+                </div>
+                <p id="probText" class="text-right text-sm font-mono text-slate-300">0.0%</p>
+
+                <div class="mt-8 grid grid-cols-2 gap-4 text-sm text-slate-400">
+                    <div class="bg-slate-800 p-3 rounded-lg">
+                        <p>Original Probability</p>
+                        <p id="rawOrig" class="text-white font-mono">0.00</p>
+                    </div>
+                    <div class="bg-slate-800 p-3 rounded-lg">
+                        <p>Spoof Probability</p>
+                        <p id="rawSpoof" class="text-white font-mono">0.00</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'upload';
+        let mediaRecorder;
+        let audioChunks = [];
+        let recordedBlob = null;
+        let selectedFile = null;
+
+        // Tab Switching
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('section-upload').classList.toggle('hidden', tab !== 'upload');
+            document.getElementById('section-record').classList.toggle('hidden', tab !== 'record');
+            
+            // Style buttons
+            const btnUpload = document.getElementById('tab-upload');
+            const btnRecord = document.getElementById('tab-record');
+            
+            if(tab === 'upload') {
+                btnUpload.className = "flex-1 py-2 rounded-md text-sm font-semibold bg-slate-600 text-white transition-all";
+                btnRecord.className = "flex-1 py-2 rounded-md text-sm font-semibold text-slate-400 hover:text-white transition-all";
+            } else {
+                btnRecord.className = "flex-1 py-2 rounded-md text-sm font-semibold bg-slate-600 text-white transition-all";
+                btnUpload.className = "flex-1 py-2 rounded-md text-sm font-semibold text-slate-400 hover:text-white transition-all";
+            }
+        }
+
+        // File Upload Handling
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            if (e.target.files[0]) {
+                selectedFile = e.target.files[0];
+                document.getElementById('fileNameDisplay').textContent = selectedFile.name;
+                document.getElementById('fileNameDisplay').classList.remove('hidden');
+            }
+        });
+
+        // Microphone Logic
+        const recordBtn = document.getElementById('recordBtn');
+        recordBtn.addEventListener('click', async () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                recordBtn.classList.remove('record-btn-active');
+                document.getElementById('recordStatus').textContent = "Recording Saved";
+                document.getElementById('recordStatus').classList.add('text-green-400');
+            } else {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    
+                    mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                    
+                    mediaRecorder.onstop = () => {
+                        recordedBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(recordedBlob);
+                        const audio = document.getElementById('audioPlayback');
+                        audio.src = audioUrl;
+                        audio.classList.remove('hidden');
+                    };
+
+                    mediaRecorder.start();
+                    recordBtn.classList.add('record-btn-active');
+                    document.getElementById('recordStatus').textContent = "Recording... Click to Stop";
+                    document.getElementById('recordStatus').classList.remove('text-green-400');
+                } catch (err) {
+                    alert("Microphone access denied or not available.");
+                }
+            }
+        });
+
+        // Analyze Logic
+        async function analyzeAudio() {
+            let formData = new FormData();
+            
+            if (currentTab === 'upload') {
+                if (!selectedFile) return alert("Please upload a file first.");
+                formData.append('file', selectedFile);
+            } else {
+                if (!recordedBlob) return alert("Please record audio first.");
+                formData.append('file', recordedBlob, "mic_recording.wav");
+            }
+
+            // UI Loading State
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+            document.getElementById('analyzeBtn').disabled = true;
+
+            try {
+                const response = await fetch('/predict', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (data.error) {
+                    alert("Error: " + data.error);
+                } else {
+                    displayResult(data);
+                }
+            } catch (error) {
+                alert("Network Error: " + error);
+            } finally {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+
+        function displayResult(data) {
+            document.getElementById('initialState').classList.add('hidden');
+            const resDiv = document.getElementById('resultState');
+            resDiv.classList.remove('hidden');
+
+            const isSpoof = data.label === 'Spoof';
+            const color = isSpoof ? '#ef4444' : '#22c55e'; // Red vs Green
+            
+            // Icon
+            const iconDiv = document.getElementById('resultIcon');
+            iconDiv.style.backgroundColor = isSpoof ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)';
+            iconDiv.style.color = color;
+            iconDiv.innerHTML = isSpoof ? '<i class="fas fa-exclamation-triangle"></i>' : '<i class="fas fa-check-circle"></i>';
+
+            // Text
+            const labelEl = document.getElementById('resultLabel');
+            labelEl.textContent = isSpoof ? "SPOOF DETECTED" : "ORIGINAL AUDIO";
+            labelEl.style.color = color;
+
+            // Bar
+            const prob = (data.confidence * 100).toFixed(1);
+            const bar = document.getElementById('probBar');
+            bar.style.width = prob + '%';
+            bar.style.backgroundColor = color;
+            document.getElementById('probText').textContent = prob + '%';
+
+            // Details
+            document.getElementById('rawOrig').textContent = data.prob_original.toFixed(4);
+            document.getElementById('rawSpoof').textContent = data.prob_spoof.toFixed(4);
+        }
+    </script>
+</body>
+</html>
